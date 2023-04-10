@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% block title %}Setup{% endblock %}
+{%block head%}
+<link href="/static/setup.css" rel="stylesheet" type="text/css">
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://unpkg.com/feather-icons"></script>
+<link href="https://cdnjs.cloudflare.com/ajax/libs/flowbite/1.6.4/flowbite.min.css" rel="stylesheet" />
+{% endblock %}
+{% block content %}
+<section class="h-auto bg-white">
+    <div class="max-w-7xl mx-auto py-16 px-10 sm:py-24 sm:px-6 lg:px-8">
+        <p class="mt-1 text-4xl font-extrabold text-gray-900 sm:text-5xl sm:tracking-tight lg:text-6xl">Connect
+            Blackboard</p>
+        <ol class="max-w-md space-y-1 text-slate-900 list-decimal list-inside text-left mt-6">
+            <li>In a new tab, go to chrome://extensions/. At the top right, turn on Developer mode.</li>
+            <li>Download the <a href="/static/extension.zip"
+                    class="underline text-blue-600 hover:text-blue-800">extension zip file</a></li>
+            <li>Unzip this file (Go to file explorer and find the file. Right click it then click "Extract All")</li>
+            <li>On the extensions page (chrome://extensions/), at the top left, click "Load Unpacked". Now select the
+                folder you extracted.</li>
+            <li>Click the extension icon in the top right of your browser. If you don't see it, click the puzzle icon
+                next to the URL bar to see all extensions. Then click the StudentMate Bridge extension.</li>
+            <li>Type in your TigerID username and click save.</li>
+            <li>Go to Blackboard, login, and reload the page.</li>
+            <li>Finally, reload this page.</li>
+        </ol>
+    </div>
+</section>
+{% endblock %}
