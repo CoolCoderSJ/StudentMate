@@ -361,7 +361,7 @@ def editClass(classId:int):
         "className": request.form.get("name"),
         "teacher": request.form.get("teacher"),
         "userId": user,
-        "courseId": classId,
+        "courseId": userclass['courseId'],
         "propagateAutomatically": request.form.get("propagateAutomatically") == "on"
     })
     return redirect("/class/" + str(classId))
