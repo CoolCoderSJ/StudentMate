@@ -12,6 +12,9 @@ from appwrite.client import Client
 from appwrite.services.databases import Databases
 from appwrite.query import Query
 
+from dotenv import load_dotenv
+load_dotenv()
+
 from email.message import EmailMessage
 import smtplib
 SENDER = os.environ['SENDGRID_EMAIL']
@@ -20,8 +23,6 @@ PASSWORD = os.environ['SENDGRID_PASSWORD']
 from lxml import etree
 parser = etree.XMLParser(strip_cdata=False)
 
-from dotenv import load_dotenv
-load_dotenv()
 
 
 client = (Client()
