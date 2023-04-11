@@ -38,9 +38,8 @@ The project uses [Appwrite](https://appwrite.io), so you will need to get an app
 - **If you need more help creating these credentials, follow this tutorial: https://developers.google.com/workspace/guides/create-credentials**
 
 #### YouChat
-- Make a new account at https://you.com/
-- DO NOT use social sign in. Use an email and password.
-- Fill out the email and password as `YOU_EMAIL` and `YOU_PASSWORD` in the `.env`
+- Get an API Key at https://api.betterapi.net/about/
+- Fill out the api key as `YOU_API_KEY`in the `.env`
 
 #### Email and SMS Notifications
 To send email reminders, the project uses gmail SMTP. If you would like to use something else, you can configure the `send_email` function (View [here](https://github.com/CoolCoderSJ/StudentMate/blob/9463713e773679b4149d49ff2605beced0141b2b/utils.py#L285)) to use your SMTP settings and change [line 331 of `utils.py`](https://github.com/CoolCoderSJ/StudentMate/blob/9463713e773679b4149d49ff2605beced0141b2b/utils.py#L331) to use the send_email function instead.
