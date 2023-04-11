@@ -7,6 +7,7 @@ import undetected_chromedriver as uc
 from selenium import webdriver
 from selenium.webdriver.remote.webdriver import By
 from selenium.webdriver.common.keys import Keys
+from youdotcom import Chat
 
 from appwrite.client import Client
 from appwrite.services.databases import Databases
@@ -35,47 +36,6 @@ def init_driver():
     options = webdriver.ChromeOptions()
     options.add_argument("--headless")
     driver = uc.Chrome(options=options, driver_executable_path="/home/ubuntu/StudentMate/chromedriver", version_main=110)
-    print("Driver Intialized")
-
-    driver.get("https://you.com/chat")
-    time.sleep(.5)
-    for i in range(10):
-        try:
-            signInBtn = driver.find_element(By.CSS_SELECTOR, "[data-eventactionname='sign_in']")
-            break
-        except:
-            print("failed trying to find sign in button, trying again")
-            continue
-
-    print(signInBtn)
-
-    if signInBtn:
-        signInBtn.click()
-        time.sleep(1)
-        if "auth.you.com" in driver.current_url:
-            for i in range(10):
-                try:
-                    emailField = driver.find_element(By.ID, "1-email")
-                    passwordField = driver.find_element(By.CSS_SELECTOR, "[name='password']")
-                    submitBtn = driver.find_element(By.CSS_SELECTOR, "[name='submit']")
-                    break
-                except:
-                    print("failed trying to find form fields, trying again")
-                    continue
-            
-            for i in range(10):
-                try:
-                    emailField.send_keys(os.environ['YOU_EMAIL'])
-                    passwordField.send_keys(os.environ['YOU_PASSWORD'])
-                    submitBtn.click()
-                    break
-                except:
-                    print("sign in form not interactable, trying again")
-                    continue
-
-            time.sleep(2)
-            print(driver.current_url)
-    
     return driver
 
 def gpt_ify_classes(url):
@@ -85,16 +45,18 @@ def gpt_ify_classes(url):
     driver.get(url)
     print("saving sreenshot...")
     driver.save_screenshot(f"{pId}.png")
-    driver.get("https://you.com/search?q=who+are+you&tbm=youchat&cfr=chat")
+    driver.close()
+    os.system("ps aux | grep -ie chromium | awk '{print $2}' | xargs kill -9")
+    os.system("ps aux | grep -ie chromedriver | awk '{print $2}' | xargs kill -9")
     print("reading text...")
     text = image_to_string(Image.open(f"{pId}.png"))
     text = text.replace('\n', '')
     os.remove(f"{pId}.png")
     time.sleep(.5)
-    assignments = askgpt(driver, f"You are given the following text: {text} From this piece of text, find all of the assignments listed and when they are due. List these assignments in the following order- [assignment name] due [due date] where due date is in the form mm/dd/yyyy hh:mm:ss. If no date is specified, use the date the assignment was assigned on. If no time is specified, use 23:59:59 for the time. Do not use parentheses. Today is {datetime.datetime.today().strftime('%A')}. The date is {datetime.datetime.now().strftime('%m/%d/%Y')}. Use this date to calculate dates for names of days All dates should be after today. Make sure the format matches the following exactly- [assignment name] due [due date] where due date is mm/dd/yyyy hh:mm:ss. Insert a new line after each assignment.")
-    driver.close()
-    os.system("ps aux | grep -ie chromium | awk '{print $2}' | xargs kill -9")
-    os.system("ps aux | grep -ie chromedriver | awk '{print $2}' | xargs kill -9")
+    assignments = Chat.send_message(message=f"You are given the following text: {text} From this piece of text, find all of the assignments listed and when they are due. List these assignments in the following order- [assignment name] due [due date] where due date is in the form mm/dd/yyyy hh:mm:ss. If no date is specified, use the date the assignment was assigned on. If no time is specified, use 23:59:59 for the time. Do not use parentheses. Today is {datetime.datetime.today().strftime('%A')}. The date is {datetime.datetime.now().strftime('%m/%d/%Y')}. Use this date to calculate dates for names of days All dates should be after today. Make sure the format matches the following exactly- [assignment name] due [due date] where due date is mm/dd/yyyy hh:mm:ss. Insert a new line after each assignment.", api_key=os.environ['YOU_API_KEY'])
+    if not assignments['message']:
+        return {}
+    assignments = assignments['message']
     print(assignments)
     assignmentsList = {}
     if not assignments:
@@ -116,51 +78,6 @@ def gpt_ify_classes(url):
             assignmentsList[name] = date
     print(assignmentsList)
     return assignmentsList
-
-def askgpt(driver, prompt):
-    print("Asking question...")
-    for i in range(10):
-        try:
-            inputFieldContainer = driver.find_element(By.CSS_SELECTOR, "[data-testid='youchat-input']")
-            textarea = inputFieldContainer.find_element(By.TAG_NAME, "textarea")
-            break
-        except:
-            print("input not found, trying again")
-            continue
-
-    for i in range(10):
-        try:
-            textarea.send_keys(prompt)
-            textarea.send_keys(Keys.RETURN)
-            break
-        except:
-            print("could not interact with answer box, trying again")
-            continue
-
-    time.sleep(7)
-    for i in range(10):
-        try:
-            answer = driver.find_element(By.CSS_SELECTOR, "[data-testid='youchat-answer-turn-0']")
-            break
-        except:
-            print("Answer element not found, trying again")
-            time.sleep(.5)
-            answer = None
-            continue
-    
-    if answer is not None:
-        allElements = answer.find_elements(By.CSS_SELECTOR, "*")
-        response = ""
-        for element in allElements:
-            try:
-                response += element.get_attribute('innerText')
-                response += "\n"
-            except:
-                pass
-
-        driver.get("https://you.com/search?q=who+are+you&tbm=youchat&cfr=chat")
-        return response
-    
 
 def getBbClasses(userId, cookie=None):
     document = db.list_documents("users", "users", queries=[Query.equal("id", userId)])
@@ -243,7 +160,7 @@ def propagate():
 
     for userclass in documents:
         if userclass['propagateAutomatically']:
-            print(userclass['className'])
+            print(userclass['className'], userclass['userId'])
             slidesLink = getBbClassPage(userclass['userId'], userclass['courseId'])
             if slidesLink:
                 assignments = gpt_ify_classes(slidesLink)
@@ -310,13 +227,13 @@ def sendText(phone, carrier, message):
     send_email(recipient=f"{phone}{gateway}", subject='StudentMate Notification', body=message)
 
 def remind():
+    return
     assignments = db.list_documents("users", "assignments")
     documents = []
     for assign in assignments['documents']:
         documents.append(assign)
         while True:
             if assignments['total'] > len(documents):
-                print(len(documents), assignments['total'])
                 assignments = db.list_documents("users", "assignments", queries=[Query.offset(len(documents)-1), Query.limit(100)])
                 for assign in assignments['documents']:
                     documents.append(assign)
@@ -325,7 +242,6 @@ def remind():
     for assign in documents:
         due = datetime.datetime.strptime(assign['due'], '%Y-%m-%dT%H:%M:%S.%f%z')
         overdue = due < datetime.datetime.now().replace(tzinfo=due.tzinfo)
-        print(overdue, due, datetime.datetime.now().replace(tzinfo=due.tzinfo), assign['notified'], assign['completed'])
         if overdue and not assign['notified'] and not assign['completed']:
             print(assign)
             user = getUserInfo(assign['userId'])
