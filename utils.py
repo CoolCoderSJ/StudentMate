@@ -16,6 +16,8 @@ from appwrite.query import Query
 from dotenv import load_dotenv
 load_dotenv()
 
+import urllib.parse
+
 from email.message import EmailMessage
 import smtplib
 SENDER = os.environ['SENDGRID_EMAIL']
@@ -41,20 +43,35 @@ def init_driver():
 def gpt_ify_classes(url):
     pId = url.split("/d/e/")[1].split("/")[0].replace("-", "")
     print("Getting screenshot...")
-    driver = init_driver()
-    driver.get(url)
+    apiurl = "https://secure.screeenly.com/api/v1/fullsize"
+    payload=f'key=sM1L2X59Afwtir8bYhGMLq5GwOI07mLkC7oFRTuytc1L91Ce4z&url={urllib.parse.quote(url)}'
+    print(payload)
+    headers = {
+    'Content-Type': 'application/x-www-form-urlencoded'
+    }
+
+    r = requests.request("POST", apiurl, headers=headers, data=payload)
+
     print("saving sreenshot...")
-    driver.save_screenshot(f"{pId}.png")
-    driver.close()
-    os.system("ps aux | grep -ie chromium | awk '{print $2}' | xargs kill -9")
-    os.system("ps aux | grep -ie chromedriver | awk '{print $2}' | xargs kill -9")
+    try:
+        r = r.json()
+    except:
+        return {}
+    if not "path" in r:
+        return {}
+    r = requests.get(r['path'])
+    with open(f"{pId}.png", "wb") as f:
+        f.write(r.content)
     print("reading text...")
     text = image_to_string(Image.open(f"{pId}.png"))
     text = text.replace('\n', '')
     os.remove(f"{pId}.png")
     time.sleep(.5)
-    assignments = Chat.send_message(message=f"You are given the following text: {text} From this piece of text, find all of the assignments listed and when they are due. List these assignments in the following order- [assignment name] due [due date] where due date is in the form mm/dd/yyyy hh:mm:ss. If no date is specified, use the date the assignment was assigned on. If no time is specified, use 23:59:59 for the time. Do not use parentheses. Today is {datetime.datetime.today().strftime('%A')}. The date is {datetime.datetime.now().strftime('%m/%d/%Y')}. Use this date to calculate dates for names of days All dates should be after today. Make sure the format matches the following exactly- [assignment name] due [due date] where due date is mm/dd/yyyy hh:mm:ss. Insert a new line after each assignment.", api_key=os.environ['YOU_API_KEY'])
-    if not assignments['message']:
+    message = f"You are given the following text: {text} From this piece of text, find all of the assignments listed and when they are due. List these assignments in the following order- [assignment name] due [due date] where due date is in the form mm/dd/yyyy hh:mm:ss. If no date is specified, use the date the assignment was assigned on. If no time is specified, use 23:59:59 for the time. Do not use parentheses. Today is {datetime.datetime.today().strftime('%A')}. The date is {datetime.datetime.now().strftime('%m/%d/%Y')}. Use this date to calculate dates for names of days All dates should be after today. Make sure the format matches the following exactly- [assignment name] due [due date] where due date is mm/dd/yyyy hh:mm:ss. Insert a new line after each assignment."
+    print(urllib.parse.quote(message), "\n", os.environ['YOU_API_KEY'].strip())
+    assignments = Chat.send_message(message=urllib.parse.quote(message), api_key=os.environ['YOU_API_KEY'].strip())
+    if not "message" in assignments:
+        print(assignments)
         return {}
     assignments = assignments['message']
     print(assignments)

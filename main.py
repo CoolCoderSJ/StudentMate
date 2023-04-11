@@ -437,5 +437,3 @@ scheduler.start()
 app.run(host="0.0.0.0", port=9999)
 
 import os
-os.system("ps aux | grep -ie chromium | awk '{print $2}' | xargs kill -9")
-os.system("ps aux | grep -ie chromedriver | awk '{print $2}' | xargs kill -9")
