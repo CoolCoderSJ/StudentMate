@@ -43,23 +43,14 @@ def init_driver():
 def gpt_ify_classes(url):
     pId = url.split("/d/e/")[1].split("/")[0].replace("-", "")
     print("Getting screenshot...")
-    apiurl = "https://secure.screeenly.com/api/v1/fullsize"
-    payload=f'key=sM1L2X59Afwtir8bYhGMLq5GwOI07mLkC7oFRTuytc1L91Ce4z&url={urllib.parse.quote(url)}'
-    print(payload)
+    apiurl = f"https://image.thum.io/get/maxAge/12/width/1920/{url}"
+    payload={}
     headers = {
-    'Content-Type': 'application/x-www-form-urlencoded'
+    'Referer': 'https://www.thum.io/',
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/111.0.0.0 Safari/537.36'
     }
 
-    r = requests.request("POST", apiurl, headers=headers, data=payload)
-
-    print("saving sreenshot...")
-    try:
-        r = r.json()
-    except:
-        return {}
-    if not "path" in r:
-        return {}
-    r = requests.get(r['path'])
+    r = requests.request("GET", apiurl, headers=headers, data=payload)
     with open(f"{pId}.png", "wb") as f:
         f.write(r.content)
     print("reading text...")

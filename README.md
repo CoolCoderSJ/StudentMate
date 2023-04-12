@@ -49,9 +49,6 @@ If you would like to use Gmail SMTP, all you have to do is fill out `EMAIL` and 
 ##### SMS
 To send emails StudentMate uses Gmail SMTP so that it uses my school email to bypass any district email filters. However, to text people, StudentMate uses Sendgrid (email-to-text) so that it can use the official email. If you are fine with Sendgrid, configure `SENDGRID_EMAIL` and `SENDGRID_PASSWORD` in the env file. Otherwise, configure the `send_email` function (View [here](https://github.com/CoolCoderSJ/StudentMate/blob/9463713e773679b4149d49ff2605beced0141b2b/utils.py#L285)) to use your SMTP settings instead. 
 
-### Screeenly
-Taking screenshots on the server consumes an immense amount of resources and therefore has to be done externally. This is done via Screeenly, a free screenshot API. To use it, set the `SCREENLY_API_KEY` in `.env` to your Screeenly API key. (Get one [here](https://screeenly.com/))
-
 ### Python
 4. Install Python and its Requirements
 - Make sure you have Python 3 installed.
