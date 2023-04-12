@@ -49,6 +49,9 @@ If you would like to use Gmail SMTP, all you have to do is fill out `EMAIL` and 
 ##### SMS
 To send emails StudentMate uses Gmail SMTP so that it uses my school email to bypass any district email filters. However, to text people, StudentMate uses Sendgrid (email-to-text) so that it can use the official email. If you are fine with Sendgrid, configure `SENDGRID_EMAIL` and `SENDGRID_PASSWORD` in the env file. Otherwise, configure the `send_email` function (View [here](https://github.com/CoolCoderSJ/StudentMate/blob/9463713e773679b4149d49ff2605beced0141b2b/utils.py#L285)) to use your SMTP settings instead. 
 
+### Huggingface
+StudentMate uses Sentence Transformers (all-MiniLM-L6-v2) to check for similar assignments so that duplicates aren't created. To connect to this model, you need a huggingface token. Add this token as `HUGGINGFACE_TOKEN` in the env.
+
 ### Python
 4. Install Python and its Requirements
 - Make sure you have Python 3 installed.
