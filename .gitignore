@@ -2,3 +2,4 @@ flask_session/
 __pycache__/
 nohup.out
 .env
+nuke.py

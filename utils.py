@@ -1,4 +1,5 @@
 # https://docs.google.com/presentation/d/e/2PACX-1vQvLy60vlsp4jsGW69-lkppZeThqanHiqJcYt-4JyZffI4tZL-cwLmWZTgLWM1pc7BjzICJE9FBLnw7/embed?start=false&amp;loop=false&amp;delayms=3000
+from sentence_transformers import SentenceTransformer, util
 from lxml import etree
 import smtplib
 from email.message import EmailMessage
@@ -18,7 +19,6 @@ from appwrite.query import Query
 from dotenv import load_dotenv
 load_dotenv()
 
-from sentence_transformers import SentenceTransformer, util
 model = SentenceTransformer('all-MiniLM-L6-v2')
 
 SENDER = os.environ['SENDGRID_EMAIL']
@@ -32,6 +32,7 @@ client = (Client()
           .set_project('studentmate')                # Your project ID
           .set_key(os.environ['APPWRITE_API_KEY']))          # Your secret API key
 db = Databases(client)
+
 
 def gpt_ify_classes(url):
     pId = url.split("/d/e/")[1].split("/")[0].replace("-", "")
@@ -154,6 +155,7 @@ def getBbClassPage(userId, courseId):
 
     return slidesLink
 
+
 def checkSim(name):
     assignments = db.list_documents("users", "assignments")
     documents = []
@@ -177,8 +179,10 @@ def checkSim(name):
             if output > 0.9:
                 return True
         except:
-            if assign['name'] == name: return True
+            if assign['name'] == name:
+                return True
     return False
+
 
 def propagate():
     allClasses = db.list_documents("users", "classes")
@@ -202,7 +206,8 @@ def propagate():
             if slidesLink:
                 assignments = gpt_ify_classes(slidesLink)
                 for name, due in assignments.items():
-                    if checkSim(name): continue
+                    if checkSim(name):
+                        continue
                     print(name, due, userclass['className'])
                     now = datetime.datetime.now().strftime('%Y-%m-%dT%H:%M:%S.%f%z')
                     db.create_document("users", "assignments", "unique()", {
@@ -311,3 +316,31 @@ def remind():
                 "completed": assign['completed'],
                 "notified": True
             })
+        rn = datetime.datetime.now().replace(tzinfo=due.tzinfo)
+        thresholds = {
+            "30m": (due - datetime.timedelta(minutes=30)) <= rn, 
+            "1h": (due - datetime.timedelta(hours=1)) <= rn, 
+            "6h": (due - datetime.timedelta(hours=6)) <= rn, 
+            "12h": (due - datetime.timedelta(hours=12)) <= rn, 
+            "1d": (due - datetime.timedelta(days=1)) <= rn
+        }
+        notifs = db.list_documents("users", "notifications", queries=[Query.equal("assignId", assign['id'])])
+        if notifs['total'] == 0: continue
+        notifs = notifs['documents'][0]
+        print(thresholds, rn)
+        print(due - datetime.timedelta(days=1))
+        for threshold, condition in thresholds.items():
+            print(assign['id'], threshold, condition)
+            if threshold in notifs['times'] and condition and not threshold in notifs['notifiedAt']:
+                user = getUserInfo(assign['userId'])
+                print(user)
+                send_gmail(user['email'], 'StudentMate Notification',
+                        f'Your assignment {assign["name"]} is due soon! It is due in {threshold.replace("m", " minutes").replace("h", " hours").replace("d", " days")}')
+                if user['phoneNumber'] and user['phoneCarrier']:
+                    sendText(user['phoneNumber'], user['phoneCarrier'],
+                            f'Your assignment {assign["name"]} is due soon! It is due in {threshold.replace("m", " minutes").replace("h", " hours").replace("d", " days")}')
+                db.update_document("users", "notifications", notifs['$id'], {
+                    "assignId": assign['id'],
+                    "times": notifs['times'],
+                    "notifiedAt": notifs['notifiedAt'] + [threshold]
+                })

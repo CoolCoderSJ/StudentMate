@@ -68,6 +68,38 @@ function change_complete_status(assignId) {
     form.submit()
 }
 
+function getSelectValues(select) {
+    var result = [];
+    var options = select && select.options;
+    var opt;
+  
+    for (var i=0, iLen=options.length; i<iLen; i++) {
+      opt = options[i];
+  
+      if (opt.selected) {
+        result.push(opt.value || opt.text);
+      }
+    }
+    return result;
+  }
+
+function httpGetAsync(theUrl, callback) {
+var xmlHttp = new XMLHttpRequest();
+xmlHttp.onreadystatechange = function() { 
+    if (xmlHttp.readyState == 4 && xmlHttp.status == 200)
+        callback(xmlHttp.responseText);
+}
+xmlHttp.open("GET", theUrl, true); // true for asynchronous 
+xmlHttp.send(null);
+}
+
+function changenotifs(assignId, notifsElem) {
+    let courseId = document.querySelector("meta[name='classId']").getAttribute("content")
+    console.log(assignId, getSelectValues(notifsElem))
+    httpGetAsync(`/class/${courseId}/assignment/${assignId}/editNotifs/${getSelectValues(notifsElem).join(",")}`, (res)=>{});
+}
+
 window.editable = editable
 window.makeFormAndSave = makeFormAndSave
 window.change_complete_status = change_complete_status
+window.changenotifs = changenotifs

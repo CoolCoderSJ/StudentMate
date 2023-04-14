@@ -215,6 +215,75 @@ def oauthCallback():
         session['user'] = results['documents'][0]['id']
         return redirect("/")
 
+@app.get("/class/<int:classId>/assignment/<assignmentId>/editNotifs/<notiftimes>")
+def editNotifs(classId:int, assignmentId, notiftimes):
+    if not session.get("user"):
+        return render_template("landing.html")
+    
+    if session.get("firstTime"):
+        return render_template("setup.html", user=session.get("user"))
+
+    user = int(session.get("user"))
+    userclass = db.list_documents("users", "classes", queries=[Query.equal("userId", user), Query.equal("id", classId)])
+    if userclass['total'] == 0:
+        return render_template("error.html", context={"error": "You are not enrolled in this class."})
+    
+    userclass = userclass['documents'][0]
+
+    assignment = db.list_documents("users", "assignments", queries=[Query.equal("classId", userclass['id']), Query.equal("id", int(assignmentId))])
+    if assignment['total'] == 0:
+        return render_template("error.html", context={"error": "Assignment not found."})
+    
+    assignment = assignment['documents'][0]
+    notifs = notiftimes.split(",")
+    notifdb = db.list_documents("users", "notifications", queries=[Query.equal("assignId", assignment['id'])])
+    if notifdb['total'] == 0:
+        db.create_document("users", "notifications", "unique()", {
+            "assignId": assignment['id'],
+            "times": notifs
+        })
+    else:
+        db.update_document("users", "notifications", notifdb['documents'][0]['$id'], {
+            "assignId": assignment['id'],
+            "times": notifs,
+            "notifiedAt": notifdb['documents'][0]['notifiedAt']
+        })
+    return "ok"
+
+@app.get("/class/<int:classId>/assignment/<assignmentId>/editNotifs/")
+def clearNotifs(classId:int, assignmentId):
+    if not session.get("user"):
+        return render_template("landing.html")
+    
+    if session.get("firstTime"):
+        return render_template("setup.html", user=session.get("user"))
+
+    user = int(session.get("user"))
+    userclass = db.list_documents("users", "classes", queries=[Query.equal("userId", user), Query.equal("id", classId)])
+    if userclass['total'] == 0:
+        return render_template("error.html", context={"error": "You are not enrolled in this class."})
+    
+    userclass = userclass['documents'][0]
+
+    assignment = db.list_documents("users", "assignments", queries=[Query.equal("classId", userclass['id']), Query.equal("id", int(assignmentId))])
+    if assignment['total'] == 0:
+        return render_template("error.html", context={"error": "Assignment not found."})
+    
+    assignment = assignment['documents'][0]
+    notifdb = db.list_documents("users", "notifications", queries=[Query.equal("assignId", assignment['id'])])
+    if notifdb['total'] == 0:
+        db.create_document("users", "notifications", "unique()", {
+            "assignId": assignment['id'],
+            "times": []
+        })
+    else:
+        db.update_document("users", "notifications", notifdb['documents'][0]['$id'], {
+            "assignId": assignment['id'],
+            "times": [],
+            "notifiedAt": notifdb['documents'][0]['notifiedAt']
+        })
+    return "ok"
+
 @app.post("/class/<int:classId>/assignment/<assignmentId>/edit")
 def editAssignment(classId:int, assignmentId):
     print(request.form)
@@ -271,6 +340,11 @@ def deleteAssignment(classId:int, assignmentId):
     assignment = assignment['documents'][0]
 
     db.delete_document("users", "assignments", assignment['$id'])
+    try:
+        notif = db.list_documents("users", "notifications", queries=[Query.equal("assignId", assignment['id'])])['documents'][0]
+        db.delete_document("users", "notifications", notif['$id'])
+    except:
+        pass
     return redirect("/class/" + str(classId))
 
 @app.post("/class/<int:classId>/assignment/<assignmentId>/complete")
@@ -308,7 +382,6 @@ def completeAssignment(classId:int, assignmentId):
 
 @app.post("/class/<int:classId>/assignment/<assignmentId>/uncomplete")
 def uncompleteAssignment(classId:int, assignmentId):
-    
     if not session.get("user"):
         return render_template("landing.html")
     
@@ -382,14 +455,18 @@ def addAssignment(classId:int):
     
     userclass = userclass['documents'][0]
 
+    assignId = getId("assignments")
     db.create_document("users", "assignments", "unique()", {
-        "id": getId("assignments"),
+        "id": assignId,
         "classId": userclass['id'],
         "name": request.form.get("name"),
         "userId": user,
         "added": datetime.datetime.now().strftime('%Y-%m-%dT%H:%M:%S.%f%z'),
         "due": request.form.get("due"),
         "completed": False
+    })
+    db.create_document("users", "notifications", "unique()", {
+        "assignId": assignId,
     })
     return redirect("/class/" + str(classId))
 
@@ -417,6 +494,13 @@ def classpage(classId:int):
     assignList = []
     for assignment in assignments:
         due = datetime.datetime.strptime(assignment['due'], '%Y-%m-%dT%H:%M:%S.%f%z')
+        notifs = db.list_documents("users", "notifications", queries=[Query.equal("assignId", assignment['id'])])
+        if notifs['total'] == 0:
+            notifs = []
+        else:
+            try:
+                notifs = notifs['documents'][0]['times']
+            except Exception as e: print(e); notifs = []
         assignList.append(Struct(**{
             "id": assignment['id'],
             "name": assignment['name'],
@@ -425,7 +509,8 @@ def classpage(classId:int):
             "completed": assignment['completed'],
             "classId": assignment['classId'],
             "userId": assignment['userId'],
-            "overdue": due < datetime.datetime.now().replace(tzinfo=due.tzinfo)
+            "overdue": due < datetime.datetime.now().replace(tzinfo=due.tzinfo),
+            "notifs": notifs
         }))
     return render_template("class.html", userclass=userclass, assignments=assignList)
 
@@ -434,6 +519,6 @@ scheduler.add_job(func=remind, trigger="interval", seconds=60)
 scheduler.add_job(func=propagate, trigger="interval", seconds=300)
 scheduler.start()
 
-app.run(host="0.0.0.0", port=9999)
+app.run(host="0.0.0.0", port=9999, debug=False)
 
 import os

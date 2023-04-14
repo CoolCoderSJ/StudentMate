@@ -1,10 +1,31 @@
 {% extends "base.html" %}
 {% block title %}| Home{% endblock %}
 {%block head%}
-<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://cdn.tailwindcss.com/3.3.0"></script>
 <script src="https://unpkg.com/feather-icons"></script>
 <link href="https://cdnjs.cloudflare.com/ajax/libs/flowbite/1.6.4/flowbite.min.css" rel="stylesheet" />
 <meta name="classId" content="{{ userclass['id'] if userclass else '0' }}">
+<link
+  href="https://fonts.googleapis.com/css?family=Roboto:300,400,500,700,900&display=swap"
+  rel="stylesheet" />
+<link
+  rel="stylesheet"
+  href="https://cdn.jsdelivr.net/npm/tw-elements/dist/css/tw-elements.min.css" />
+<script>
+  tailwind.config = {
+    darkMode: "class",
+    theme: {
+      fontFamily: {
+        sans: ["Roboto", "sans-serif"],
+        body: ["Roboto", "sans-serif"],
+        mono: ["ui-monospace", "monospace"],
+      },
+    },
+    corePlugins: {
+      preflight: false,
+    },
+  };
+</script>
 {% endblock %}
 {% block content %}
 <section class="h-auto">
@@ -198,7 +219,17 @@
                                             class="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-600">
                                     </td>
                                     <td class="border-b border-slate-100 p-4 text-slate-900 flex w-full content-center scale-90"
-                                        style="gap: 10px;"><i id="{{assignment.id}}_edit" data-feather="edit"
+                                        style="gap: 10px;">
+                                        <select data-te-select-init multiple onchange="changenotifs('{{assignment.id}}', this)">
+                                            <option value="30m" {% if "30m" in assignment.notifs %}selected{% endif %}>30 minutes before</option>
+                                            <option value="1h" {% if "1h" in assignment.notifs %}selected{% endif %}>1 hour before</option>
+                                            <option value="6h" {% if "6h" in assignment.notifs %}selected{% endif %}>6 hours before</option>
+                                            <option value="12h" {% if "12h" in assignment.notifs %}selected{% endif %}>12 hours before</option>
+                                            <option value="1d" {% if "1d" in assignment.notifs %}selected{% endif %}>1 day before</option>
+                                          </select>
+                                          <label data-te-select-label-ref>Notifications</label>
+
+                                        <i id="{{assignment.id}}_edit" data-feather="edit"
                                             onclick="editable('{{assignment.id}}')"></i>
                                         <form method="post"
                                             action="/class/{{userclass['id']}}/assignment/{{assignment.id}}/delete"
@@ -221,4 +252,5 @@
 </script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/flowbite/1.6.4/flowbite.min.js"></script>
 <script src="/static/assignments.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/tw-elements/dist/js/tw-elements.umd.min.js"></script>
 {% endblock %}
