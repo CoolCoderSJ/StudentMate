@@ -431,7 +431,7 @@ def classpage(classId:int):
 
 scheduler = BackgroundScheduler()
 scheduler.add_job(func=remind, trigger="interval", seconds=60)
-scheduler.add_job(func=propagate, trigger="interval", seconds=3600)
+scheduler.add_job(func=propagate, trigger="interval", seconds=300)
 scheduler.start()
 
 app.run(host="0.0.0.0", port=9999)

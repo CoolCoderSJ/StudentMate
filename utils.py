@@ -18,6 +18,8 @@ from appwrite.query import Query
 from dotenv import load_dotenv
 load_dotenv()
 
+from sentence_transformers import SentenceTransformer, util
+model = SentenceTransformer('all-MiniLM-L6-v2')
 
 SENDER = os.environ['SENDGRID_EMAIL']
 PASSWORD = os.environ['SENDGRID_PASSWORD']
@@ -53,6 +55,7 @@ def gpt_ify_classes(url):
     print(urllib.parse.quote(message), "\n", os.environ['YOU_API_KEY'].strip())
     assignments = Chat.send_message(message=urllib.parse.quote(
         message), api_key=os.environ['YOU_API_KEY'].strip())
+    time.sleep(20)
     if not "message" in assignments:
         print(assignments)
         return {}
@@ -151,15 +154,6 @@ def getBbClassPage(userId, courseId):
 
     return slidesLink
 
-API_URL = "https://api-inference.huggingface.co/models/sentence-transformers/all-MiniLM-L6-v2"
-headers = {"Authorization": f"Bearer {os.environ['HUGGINGFACE_TOKEN']}"}
-
-
-def query(payload):
-    response = requests.post(API_URL, headers=headers, json=payload)
-    return response.json()
-
-
 def checkSim(name):
     assignments = db.list_documents("users", "assignments")
     documents = []
@@ -175,16 +169,15 @@ def checkSim(name):
                 break
     assignments = documents
     for assign in assignments:
-        outputs = query({
-            "inputs": {
-                "source_sentence": name,
-                "sentences": [
-                        assign['name']
-                        ]
-            },
-        })
-        if outputs[0] > 0.9:
-            return True
+        emb1 = model.encode(name)
+        emb2 = model.encode(assign['name'])
+        cos_sim = util.cos_sim(emb1, emb2)
+        output = float(cos_sim[0][0])
+        try:
+            if output > 0.9:
+                return True
+        except:
+            if assign['name'] == name: return True
     return False
 
 def propagate():
@@ -283,7 +276,6 @@ def sendText(phone, carrier, message):
 
 
 def remind():
-    return
     assignments = db.list_documents("users", "assignments")
     documents = []
     for assign in assignments['documents']:
