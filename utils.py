@@ -237,12 +237,14 @@ def propagate():
             headers = {
                 "Authorization": f"Bearer {access_token}"
             }
-            r = requests.get(f"https://classroom.googleapis.com/v1/courses/{course['id']}/courseWork", headers=headers)
+            r = requests.get(f"https://classroom.googleapis.com/v1/courses/{userclass['courseId']}/courseWork", headers=headers)
             userId = user['id']
             if r.status_code == 401:
                 refresh_google_tokens(userId)
                 continue
+            if r.status_code == 403: continue
             data = r.json()
+            if data == {}: continue
             for assignment in data['courseWork']:
                 assignId = getId("assignments")
                 name = assignment['title']
@@ -435,6 +437,7 @@ def init_gclassroom(userId):
             "id": classId,
             "className": name,
             "userId": userId,
+            "courseId": course['id']
         })
         if data == {}: continue
         for assignment in data['courseWork']:
