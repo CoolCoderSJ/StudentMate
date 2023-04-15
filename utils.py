@@ -168,15 +168,15 @@ def getBbClassPage(userId, courseId):
     return slidesLink
 
 
-def checkSim(name):
-    assignments = db.list_documents("users", "assignments")
+def checkSim(name, userId):
+    assignments = db.list_documents("users", "assignments", queries=[Query.equal("userId", userId)])
     documents = []
     for assign in assignments['documents']:
         documents.append(assign)
         while True:
             if assignments['total'] > len(documents):
                 assignments = db.list_documents("users", "assignments", queries=[
-                                                Query.offset(len(documents)-1), Query.limit(100)])
+                                                Query.equal("userId", userId), Query.offset(len(documents)-1), Query.limit(100)])
                 for assign in assignments['documents']:
                     documents.append(assign)
             else:
@@ -211,14 +211,15 @@ def propagate():
                 break
 
     for userclass in documents:
-        if userclass['propagateAutomatically']:
+        user = db.list_documents("users", "users", queries=[Query.equal("id", userclass['userId'])])
+        if userclass['propagateAutomatically'] and user['method'] == "bb-na":
             print(userclass['className'], userclass['userId'])
             slidesLink = getBbClassPage(
                 userclass['userId'], userclass['courseId'])
             if slidesLink:
                 assignments = gpt_ify_classes(slidesLink)
                 for name, due in assignments.items():
-                    if checkSim(name):
+                    if checkSim(name, userId):
                         continue
                     print(name, due, userclass['className'])
                     now = datetime.datetime.now().strftime('%Y-%m-%dT%H:%M:%S.%f%z')
@@ -230,6 +231,37 @@ def propagate():
                         "classId": userclass['id'],
                         "userId": userclass['userId']
                     })
+        elif user['method'] == 'gclassroom':
+            sync = db.list_documents("sync", "gclassroom", queries=[Query.equal("userId", user['id'])])
+            access_token = sync['documents'][0]['access_token']
+            headers = {
+                "Authorization": f"Bearer {access_token}"
+            }
+            r = requests.get(f"https://classroom.googleapis.com/v1/courses/{course['id']}/courseWork", headers=headers)
+            userId = user['id']
+            if r.status_code == 401:
+                refresh_google_tokens(userId)
+                continue
+            data = r.json()
+            for assignment in data['courseWork']:
+                assignId = getId("assignments")
+                name = assignment['title']
+                print(name)
+                added = assignment['creationTime']
+                if "dueDate" in assignment:
+                    due = datetime.datetime(assignment['dueDate']['year'], assignment['dueDate']['month'], assignment['dueDate']['day']).strftime('%Y-%m-%dT%H:%M:%S.%f%z')
+                else:
+                    due = datetime.datetime(9999, 12, 31).strftime('%Y-%m-%dT%H:%M:%S.%f%z')
+                if checkSim(name, userId):
+                    continue
+                db.create_document("users", "assignments", "unique()", {
+                    "id": assignId,
+                    "name": name,
+                    "added": added,
+                    "due": due,
+                    "classId": userclass['id'],
+                    "userId": userId,
+                })
 
 
 def getId(collection): return db.list_documents(
@@ -356,3 +388,69 @@ def remind():
                     "times": notifs['times'],
                     "notifiedAt": notifs['notifiedAt'] + [threshold]
                 })
+
+def refresh_google_tokens(userId):
+    sync = db.list_documents("sync", "gclassroom", queries=[Query.equal("userId", userId)])
+    access_token = sync['documents'][0]['access_token']
+    refresh_token = sync['documents'][0]['refresh_token']
+    url = "https://oauth2.googleapis.com/token"
+    r = requests.post(url, data={
+        "client_id": os.environ['GOOGLE_CLIENT_ID'],
+        "client_secret": os.environ['GOOGLE_CLIENT_SECRET'],
+        "refresh_token": refresh_token,
+        "grant_type": "refresh_token"
+    })
+    data = r.json()
+    access_token = data['access_token']
+    refresh_token = data['refresh_token']
+    db.update_document("sync", "gclassroom", sync['documents'][0]['$id'], {
+        "userId": userId,
+        "access_token": access_token,
+        "refresh_token": refresh_token
+    })
+
+def init_gclassroom(userId):
+    sync = db.list_documents("sync", "gclassroom", queries=[Query.equal("userId", userId)])
+    access_token = sync['documents'][0]['access_token']
+    headers = {
+        "Authorization": f"Bearer {access_token}"
+    }
+    r = requests.get("https://classroom.googleapis.com/v1/courses", headers=headers)
+    if r.status_code == 401:
+        refresh_google_tokens(userId)
+        init_gclassroom(userId)
+        return
+    data = r.json()
+    for course in data['courses']:
+        name = course['name']
+        classId = getId("classes")
+        r = requests.get(f"https://classroom.googleapis.com/v1/courses/{course['id']}/courseWork", headers=headers)
+        if r.status_code == 401:
+            refresh_google_tokens(userId)
+            init_gclassroom(userId)
+            return
+        data = r.json()
+        if r.status_code == 403: continue
+        db.create_document("users", "classes", "unique()", {
+            "id": classId,
+            "className": name,
+            "userId": userId,
+        })
+        if data == {}: continue
+        for assignment in data['courseWork']:
+            assignId = getId("assignments")
+            name = assignment['title']
+            added = assignment['creationTime']
+            if "dueDate" in assignment:
+                due = datetime.datetime(assignment['dueDate']['year'], assignment['dueDate']['month'], assignment['dueDate']['day']).strftime('%Y-%m-%dT%H:%M:%S.%f%z')
+            else:
+                due = datetime.datetime(9999, 12, 31).strftime('%Y-%m-%dT%H:%M:%S.%f%z')
+            db.create_document("users", "assignments", "unique()", {
+                "id": assignId,
+                "name": name,
+                "added": added,
+                "due": due,
+                "classId": classId,
+                "userId": userId,
+            })
+    print("done w gclass")

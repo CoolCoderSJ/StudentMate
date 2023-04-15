@@ -15,6 +15,7 @@ utc=pytz.UTC
 
 from apscheduler.schedulers.background import BackgroundScheduler
 from dotenv import load_dotenv
+import urllib.parse
 
 load_dotenv()
 client = (Client()
@@ -54,6 +55,27 @@ def health():
 def faq():
     return render_template("faq.html")
 
+@app.before_request
+def before_req():
+    if not request.path in ['/', '/login', '/na/google', '/na/google/auth', '/sendCookies', '/health', '/faq', '/na/setup/2', '/gclassroom/google', '/gclassroom/google/auth'] and not request.path.startswith("/static"):
+        if not session.get("user"):
+            return redirect("/login")
+
+        user = db.list_documents("users", "users", queries=[Query.equal("id", session.get("user"))])
+        user = user['documents'][0]
+        if user['method'] == "bb-na":
+            syncRes = db.list_documents("sync", "blackboard-na", queries=[Query.equal("userId", user['id'])])
+            if syncRes['total'] == 0:
+                return redirect("/na/setup/2")
+            if not syncRes['documents'][0]['bbSyncComplete']:
+                return redirect("/na/setup/2")
+            else:
+                session['firstTime'] = False
+
+            if session.get("firstTime"):
+                return render_template("setup.html", user=session.get("user"))
+
+
 @app.get("/")
 def index():
     if not session.get("user"):
@@ -61,18 +83,6 @@ def index():
     
     user = db.list_documents("users", "users", queries=[Query.equal("id", session.get("user"))])
     user = user['documents'][0]
-    syncRes = db.list_documents("sync", "blackboard-na", queries=[Query.equal("userId", user['id'])])
-    if syncRes['total'] == 0:
-        return redirect("/na/setup/2")
-    if not syncRes['documents'][0]['bbSyncComplete']:
-        return redirect("/na/setup/2")
-    else:
-        session['firstTime'] = False
-
-    if session.get("firstTime"):
-        return render_template("setup.html", user=session.get("user"))
-
-
     classes = getUserClasses(int(session.get("user")))
     return render_template("home.html", user=user, classes=classes)
 
@@ -140,10 +150,6 @@ def sendCookies():
 
 @app.get("/na/setup/2")
 def setup2():
-    
-    if not session.get("user"):
-        return render_template("landing.html")
-    
     classes = db.list_documents("users", "classes", queries=[Query.equal("userId", session.get("user"))])
     if classes['total'] > 0: session['firstTime'] = False
     
@@ -169,9 +175,6 @@ def loginGet():
 
 @app.post("/settings")
 def setSettings():
-    if not session.get("user"):
-        return redirect("/")
-
     user = db.list_documents("users", "users", queries=[Query.equal("id", session.get("user"))])
     user = user['documents'][0]
     db.update_document("users", "users", user['$id'], {
@@ -202,7 +205,7 @@ def oauthCallback():
         return render_template("error.html", context={"error": "Hi teacher! Unfortunately, we do not have an interface for teachers yet. Something is in the works!"})
     if not "@nastudents.org" in email:
         return render_template("error.html", context={"error": "You must use your NA Student email to login."})
-    results = db.list_documents("users", "users", queries=[Query.equal("email", email)])
+    results = db.list_documents("users", "users", queries=[Query.equal("email", email), Query.equal("method", "bb-na")])
     if results['total'] == 0:
         session['firstTime'] = True
         results = db.create_document("users", "users", "unique()", {
@@ -222,14 +225,65 @@ def oauthCallback():
         session['user'] = results['documents'][0]['id']
         return redirect("/")
 
+
+@app.get("/gclassroom/google")
+def google_oauth_for_gclass():
+    params = {
+    "client_id": os.environ['GOOGLE_CLIENT_ID'],
+    "redirect_uri": 'https://studentmate.shuchir.dev/gclassroom/google/auth',
+    "response_type": 'code',
+    "scope": "https://www.googleapis.com/auth/classroom.courses.readonly https://www.googleapis.com/auth/classroom.coursework.me.readonly profile email",
+    "access_type": 'offline'
+    }
+    AUTH_URI = 'https://accounts.google.com/o/oauth2/v2/auth'
+    url = AUTH_URI + "?" + urllib.parse.urlencode(params)
+    return redirect(url)
+
+@app.get("/gclassroom/google/auth")
+def google_oauth_for_gclass_signin():
+    if request.args.get("error"):
+        return render_template("error.html", context={"error": "Error: " + request.args.get("error")})
+    code = request.args.get("code")
+    params = {
+    "client_id": os.environ['GOOGLE_CLIENT_ID'],
+    "client_secret": os.environ['GOOGLE_CLIENT_SECRET'],
+    "redirect_uri": 'https://studentmate.shuchir.dev/gclassroom/google/auth',
+    "grant_type": 'authorization_code',
+    "code": code
+    }
+    AUTH_URI = 'https://oauth2.googleapis.com/token'
+    r = requests.post(AUTH_URI, data=params)
+    r = r.json()
+    print(r)
+    res = requests.get("https://www.googleapis.com/oauth2/v2/userinfo", headers={"Authorization": "Bearer "+r['access_token']}).json()
+    print(res)
+    email = res['email']
+    results = db.list_documents("users", "users", queries=[Query.equal("email", email), Query.equal("method", "gclassroom")])
+    if results['total'] == 0:
+        session['firstTime'] = True
+        results = db.create_document("users", "users", "unique()", {
+            "id": getId("users"),
+            "name": res['name'],
+            "email": email,
+            "method": "gclassroom"
+        })
+        session['user'] = results['id']
+        syncRes = db.create_document("sync", "gclassroom", "unique()", {
+            "userId": results['id'],
+            "access_token": r['access_token'],
+            "refresh_token": r['refresh_token'],
+        })
+        print(syncRes)
+        init_gclassroom(results['id'])
+        return redirect("/")
+    else:
+        user = results['documents'][0]
+        session['user'] = user['id']
+    return redirect("/")
+
+
 @app.get("/class/<int:classId>/assignment/<assignmentId>/editNotifs/<notiftimes>")
 def editNotifs(classId:int, assignmentId, notiftimes):
-    if not session.get("user"):
-        return render_template("landing.html")
-    
-    if session.get("firstTime"):
-        return render_template("setup.html", user=session.get("user"))
-
     user = int(session.get("user"))
     userclass = db.list_documents("users", "classes", queries=[Query.equal("userId", user), Query.equal("id", classId)])
     if userclass['total'] == 0:
@@ -259,12 +313,6 @@ def editNotifs(classId:int, assignmentId, notiftimes):
 
 @app.get("/class/<int:classId>/assignment/<assignmentId>/editNotifs/")
 def clearNotifs(classId:int, assignmentId):
-    if not session.get("user"):
-        return render_template("landing.html")
-    
-    if session.get("firstTime"):
-        return render_template("setup.html", user=session.get("user"))
-
     user = int(session.get("user"))
     userclass = db.list_documents("users", "classes", queries=[Query.equal("userId", user), Query.equal("id", classId)])
     if userclass['total'] == 0:
@@ -294,12 +342,6 @@ def clearNotifs(classId:int, assignmentId):
 @app.post("/class/<int:classId>/assignment/<assignmentId>/edit")
 def editAssignment(classId:int, assignmentId):
     print(request.form)
-    if not session.get("user"):
-        return render_template("landing.html")
-    
-    if session.get("firstTime"):
-        return render_template("setup.html", user=session.get("user"))
-
     user = int(session.get("user"))
     userclass = db.list_documents("users", "classes", queries=[Query.equal("userId", user), Query.equal("id", classId)])
     if userclass['total'] == 0:
@@ -326,13 +368,7 @@ def editAssignment(classId:int, assignmentId):
 
 @app.post("/class/<int:classId>/assignment/<assignmentId>/delete")
 def deleteAssignment(classId:int, assignmentId):
-    
-    if not session.get("user"):
-        return render_template("landing.html")
-    
-    if session.get("firstTime"):
-        return render_template("setup.html", user=session.get("user"))
-    
+        
     user = int(session.get("user"))
     userclass = db.list_documents("users", "classes", queries=[Query.equal("userId", user), Query.equal("id", classId)])
     if userclass['total'] == 0:
@@ -357,12 +393,6 @@ def deleteAssignment(classId:int, assignmentId):
 @app.post("/class/<int:classId>/assignment/<assignmentId>/complete")
 def completeAssignment(classId:int, assignmentId):
     
-    if not session.get("user"):
-        return render_template("landing.html")
-    
-    if session.get("firstTime"):
-        return render_template("setup.html", user=session.get("user"))
-
     user = int(session.get("user"))
     userclass = db.list_documents("users", "classes", queries=[Query.equal("userId", user), Query.equal("id", classId)])
     if userclass['total'] == 0:
@@ -389,12 +419,6 @@ def completeAssignment(classId:int, assignmentId):
 
 @app.post("/class/<int:classId>/assignment/<assignmentId>/uncomplete")
 def uncompleteAssignment(classId:int, assignmentId):
-    if not session.get("user"):
-        return render_template("landing.html")
-    
-    if session.get("firstTime"):
-        return render_template("setup.html", user=session.get("user"))
-
     user = int(session.get("user"))
     userclass = db.list_documents("users", "classes", queries=[Query.equal("userId", user), Query.equal("id", classId)])
     if userclass['total'] == 0:
@@ -422,12 +446,6 @@ def uncompleteAssignment(classId:int, assignmentId):
 @app.post("/class/<int:classId>/edit")
 def editClass(classId:int):
     
-    if not session.get("user"):
-        return render_template("landing.html")
-    
-    if session.get("firstTime"):
-        return render_template("setup.html", user=session.get("user"))
-
     user = int(session.get("user"))
     print(user, classId)
     userclass = db.list_documents("users", "classes", queries=[Query.equal("userId", user), Query.equal("id", classId)])
@@ -449,12 +467,6 @@ def editClass(classId:int):
 @app.post("/class/<int:classId>/addAssignment")
 def addAssignment(classId:int):
     
-    if not session.get("user"):
-        return render_template("landing.html")
-    
-    if session.get("firstTime"):
-        return render_template("setup.html", user=session.get("user"))
-
     user = int(session.get("user"))
     userclass = db.list_documents("users", "classes", queries=[Query.equal("userId", user), Query.equal("id", classId)])
     if userclass['total'] == 0:
@@ -484,12 +496,6 @@ class Struct:
 @app.get("/class/<int:classId>")
 def classpage(classId:int):
     
-    if not session.get("user"):
-        return render_template("landing.html")
-    
-    if session.get("firstTime"):
-        return render_template("setup.html", user=session.get("user"))
-
     user = int(session.get("user"))
     userclass = db.list_documents("users", "classes", queries=[Query.equal("userId", user), Query.equal("id", classId)])
     if userclass['total'] == 0:
