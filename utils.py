@@ -87,11 +87,16 @@ def gpt_ify_classes(url):
 def getBbClasses(userId, cookie=None):
     document = db.list_documents("users", "users", queries=[
                                  Query.equal("id", userId)])
+    syncRes = db.list_documents("sync", "blackboard-na", queries=[Query.equal("userId", userId)])
+    
+    if syncRes['total'] == 0:
+        cookie = None
+    if not syncRes['documents'][0]['bbSyncComplete']:
+        cookie = syncRes['documents'][0]['bbcookie']
+    
     if document['total'] == 0:
         return None
     document = document['documents'][0]
-    if cookie is None:
-        cookie = document['bbcookie']
 
     url = "https://northallegheny.blackboard.com/webapps/portal/execute/tabs/tabAction"
 
@@ -130,10 +135,17 @@ def getBbClasses(userId, cookie=None):
 def getBbClassPage(userId, courseId):
     document = db.list_documents("users", "users", queries=[
                                  Query.equal("id", userId)])
+    syncRes = db.list_documents("sync", "blackboard-na", queries=[Query.equal("userId", userId)])
+    
+    if syncRes['total'] == 0:
+        cookie = None
+    if not syncRes['documents'][0]['bbSyncComplete']:
+        cookie = syncRes['documents'][0]['bbcookie']
+    
     if document['total'] == 0:
         return None
     document = document['documents'][0]
-    cookie = document['bbcookie']
+
     url = f"https://northallegheny.blackboard.com/webapps/blackboard/content/listContent.jsp?course_id={courseId}"
 
     payload = {}

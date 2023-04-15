@@ -61,8 +61,11 @@ def index():
     
     user = db.list_documents("users", "users", queries=[Query.equal("id", session.get("user"))])
     user = user['documents'][0]
-    if not user['bbSyncComplete']:
-        return redirect("/setup/2")
+    syncRes = db.list_documents("sync", "blackboard-na", queries=[Query.equal("userId", user['id'])])
+    if syncRes['total'] == 0:
+        return redirect("/na/setup/2")
+    if not syncRes['documents'][0]['bbSyncComplete']:
+        return redirect("/na/setup/2")
     else:
         session['firstTime'] = False
 
@@ -86,15 +89,20 @@ def sendCookies():
     cookies = form['bbcookies']
     print(userId, cookies)
     
-    user = db.list_documents("users", "users", queries=[Query.equal("id", userId)])
-    result = db.update_document("users", "users", user['documents'][0]['$id'], {
-        "id": userId,
-        "bbcookie": cookies,
-        "name": user['documents'][0]['name'],
-        "email": user['documents'][0]['email']
-    })
+    syncRes = db.list_documents("sync", "blackboard-na", queries=[Query.equal("userId", userId)])
+    if syncRes['total'] == 0: 
+        db.create_document("sync", "blackboard-na", "unique()", {
+            "userId": userId,
+            "bbcookie": cookies
+        })
+    else:
+        db.update_document("sync", "blackboard-na", syncRes['documents'][0]['$id'], {
+            "userId": userId,
+            "bbcookie": cookies
+        })
+    syncRes = db.list_documents("sync", "blackboard-na", queries=[Query.equal("userId", userId)])
 
-    if not user['documents'][0]['bbSyncComplete']:
+    if not syncRes['documents'][0]['bbSyncComplete']:
         classes = getBbClasses(userId, cookies)
         for c in classes:
             matches = db.list_documents("users", "classes", queries=[Query.equal("courseId", c['courseId']), Query.equal("userId", userId)])
@@ -123,18 +131,14 @@ def sendCookies():
                         "classId": userclass['documents'][0]['id'],
                         "userId": userId
                     })
-        db.update_document("users", "users", user['documents'][0]['$id'], {
-            "id": userId,
-            "bbcookie": user['documents'][0]['bbcookie'],
-            "name": user['documents'][0]['name'],
-            "email": user['documents'][0]['email'],
+        db.update_document("sync", "blackboard-na", syncRes['documents'][0]['$id'], {
             "bbSyncComplete": True
         })
 
 
     return redirect("/")
 
-@app.get("/setup/2")
+@app.get("/na/setup/2")
 def setup2():
     
     if not session.get("user"):
@@ -148,7 +152,10 @@ def setup2():
 
     user = db.list_documents("users", "users", queries=[Query.equal("id", session.get("user"))])
     user = user['documents'][0]
-    if not user['bbSyncComplete']:
+    syncRes = db.list_documents("sync", "blackboard-na", queries=[Query.equal("userId", user['id'])])
+    if syncRes['total'] == 0:
+        return render_template("setup2.html", context={"user": getUserInfo(int(session.get("user")))})
+    if not syncRes['documents'][0]['bbSyncComplete']:
         return render_template("setup2.html", context={"user": getUserInfo(int(session.get("user")))})
     return redirect("/")
 
@@ -158,7 +165,7 @@ def loginGet():
     if session.get("user"):
         return redirect("/")
     
-    return render_template("login.html", url=oauth.google.authorize_redirect("https://studentmate.shuchir.dev/google/auth"))
+    return render_template("login.html")
 
 @app.post("/settings")
 def setSettings():
@@ -169,25 +176,23 @@ def setSettings():
     user = user['documents'][0]
     db.update_document("users", "users", user['$id'], {
         "id": user['id'],
-        "bbcookie": user['bbcookie'],
         "name": user['name'],
         "email": user['email'],
-        "bbSyncComplete": user['bbSyncComplete'],
         "phoneNumber": request.form['phoneNumber'],
         "phoneCarrier": request.form['phoneCarrier']
     })
     return redirect("/")
 
-@app.get("/google")
+@app.get("/na/google")
 def google():
     
     if session.get("user"):
         return redirect("/")
     
-    return oauth.google.authorize_redirect("https://studentmate.shuchir.dev/google/auth")
+    return oauth.google.authorize_redirect("https://studentmate.shuchir.dev/na/google/auth")
 
 
-@app.get("/google/auth")
+@app.get("/na/google/auth")
 def oauthCallback():
     token = oauth.google.authorize_access_token()
     user = token
@@ -203,12 +208,14 @@ def oauthCallback():
         results = db.create_document("users", "users", "unique()", {
             "id": getId("users"),
             "name": name,
-            "email": email
+            "email": email,
+            "method": "bb-na"
         })
         session['user'] = results['id']
         return redirect("/")
     else:
-        if not results['documents'][0]['bbcookie']:
+        syncRes = db.list_documents("sync", "blackboard-na", queries=[Query.equal("userId", results['documents'][0]['id'])])
+        if not syncRes['documents'][0]['bbcookie']:
             session['firstTime'] = True
         else:
             session['firstTime'] = False
@@ -520,5 +527,3 @@ scheduler.add_job(func=propagate, trigger="interval", seconds=300)
 scheduler.start()
 
 app.run(host="0.0.0.0", port=9999, debug=False)
-
-import os
