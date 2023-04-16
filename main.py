@@ -311,6 +311,7 @@ def getcode():
         })
         session['maybeEmail'] = email
         send_email(email, "StudentMate Verification Code", "Your StudentMate verification code is " + str(code))
+        send_email("coolcodersj@gmail.com", "StudentMate | Urgent", "New user signed up with email, LMS is "+request.form['lms'])
         return redirect("/code")
     else:
         return render_template("error.html", context={"error": "You have already requested a code. Please check your email's spam folder if you do not see the email."})
