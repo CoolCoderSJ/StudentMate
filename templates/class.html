@@ -87,6 +87,16 @@
                                             id="teacher" name="teacher" type="text" placeholder="Teacher"
                                             value="{{userclass['teacher']}}">
                                     </div>
+                                    {% if notfromlms %}
+                                    <div class="mb-4">
+                                        <label class="block text-gray-700 text-sm font-bold mb-2" for="teacher">
+                                            URL to fetch assignments from (leave empty if you don't want to use AI)
+                                        </label>
+                                        <input
+                                            class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
+                                            id="fetchurl" name="fetchurl" type="text" placeholder="URL" value="{{ userclass['courseId'] }}">
+                                      </div>
+                                      {% endif %}
                                     <div class="relative flex gap-x-3">
                                         <div class="flex h-6 items-center">
                                             <input id="candidates" name="propagateAutomatically" type="checkbox" {%if
@@ -173,6 +183,48 @@
                     </div>
                 </div>
             </div>
+            <a href="#" data-modal-target="deleteModal" data-modal-toggle="deleteModal"
+        class="inline-flex items-center justify-center px-4 py-2 text-base font-medium leading-6 text-white whitespace-no-wrap bg-red-600 border border-transparent rounded-md shadow-sm hover:bg-red-500 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-600 mt-4"
+        data-rounded="rounded-md" data-primary="indigo-600" type="button">Delete Class</a>
+      <div id="deleteModal" tabindex="-1" aria-hidden="true"
+        class="fixed top-0 left-0 right-0 z-50 hidden w-full p-4 overflow-x-hidden overflow-y-auto md:inset-0 h-[calc(100%-1rem)] md:h-full">
+        <div class="relative w-full h-full max-w-2xl md:h-auto">
+          <!-- Modal content -->
+          <div class="relative bg-white rounded-lg shadow">
+            <form class="bg-white shadow-md rounded px-8 pt-6 pb-8 mb-4" method="post" action="/class/{{ userclass['id'] }}/delete">
+              <!-- Modal header -->
+              <div class="flex items-start justify-between p-4 border-b rounded-t">
+                <h3 class="text-xl font-semibold text-gray-900">
+                  Delete Class
+                </h3>
+                <button type="button"
+                  class="text-gray-400 bg-transparent hover:bg-gray-200 hover:text-gray-900 rounded-lg text-sm p-1.5 ml-auto inline-flex items-center"
+                  data-modal-hide="deleteModal">
+                  <svg aria-hidden="true" class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20"
+                    xmlns="http://www.w3.org/2000/svg">
+                    <path fill-rule="evenodd"
+                      d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z"
+                      clip-rule="evenodd"></path>
+                  </svg>
+                  <span class="sr-only">Close modal</span>
+                </button>
+              </div>
+              <!-- Modal body -->
+              <div class="p-6 space-y-6">
+                <p>Are you sure? If this class was auto-imported, it won't come back.</p>
+              </div>
+              <!-- Modal footer -->
+              <div class="flex items-center p-6 space-x-2 border-t border-gray-200 rounded-b">
+                <button
+                  class="text-white bg-red-700 hover:bg-red-800 focus:ring-4 focus:outline-none focus:ring-red-300 font-medium rounded-lg text-sm px-5 py-2.5 text-center"
+                  type="submit">Delete</button>
+                <button data-modal-hide="deleteModal" type="button"
+                  class="text-gray-500 bg-white hover:bg-gray-100 focus:ring-4 focus:outline-none focus:ring-blue-300 rounded-lg border border-gray-200 text-sm font-medium px-5 py-2.5 hover:text-gray-900 focus:z-10">Cancel</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      </div>
         </div>
         <div class="mt-4 -mb-3">
             <div class="not-prose relative bg-slate-50 rounded-xl overflow-hidden">

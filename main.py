@@ -1,7 +1,7 @@
 from flask import Flask, redirect, render_template, session, request, url_for
 from flask_session import Session
 from authlib.integrations.flask_client import OAuth
-import sys, os
+import sys, os, random
 from utils import *
 from flask_cors import CORS, cross_origin
 
@@ -18,6 +18,12 @@ from dotenv import load_dotenv
 import urllib.parse
 
 load_dotenv()
+
+from email.message import EmailMessage
+SENDER = os.environ['SENDGRID_EMAIL']
+PASSWORD = os.environ['SENDGRID_PASSWORD']
+
+
 client = (Client()
     .set_endpoint('https://appwrite.shuchir.dev/v1') # Your API Endpoint
     .set_project('studentmate')                # Your project ID
@@ -57,7 +63,7 @@ def faq():
 
 @app.before_request
 def before_req():
-    if not request.path in ['/', '/login', '/na/google', '/na/google/auth', '/sendCookies', '/health', '/faq', '/na/setup/2', '/gclassroom/google', '/gclassroom/google/auth'] and not request.path.startswith("/static"):
+    if not request.path in ['/', '/login', '/code', '/getcode', '/verifycode', '/na/google', '/na/google/auth', '/sendCookies', '/health', '/faq', '/na/setup/2', '/gclassroom/google', '/gclassroom/google/auth'] and not request.path.startswith("/static"):
         if not session.get("user"):
             return redirect("/login")
 
@@ -281,6 +287,59 @@ def google_oauth_for_gclass_signin():
         session['user'] = user['id']
     return redirect("/")
 
+def send_email(recipient, subject, body):
+    msg = EmailMessage()
+    msg.set_content(body)
+    msg["Subject"] = subject
+    msg["From"] = SENDER
+    msg["To"] = recipient
+    server = smtplib.SMTP_SSL("smtp.sendgrid.com", 465)
+    server.login("apikey", PASSWORD)
+    server.send_message(msg)
+    server.quit()
+
+
+@app.post("/getcode")
+def getcode():
+    email = request.form['email']
+    res = db.list_documents("users", "emailCodes", queries=[Query.equal("email", email)])
+    if res['total'] == 0:
+        code = random.randint(100000, 999999)
+        res = db.create_document("users", "emailCodes", "unique()", {
+            "email": email,
+            "code": str(code)
+        })
+        session['maybeEmail'] = email
+        send_email(email, "StudentMate Verification Code", "Your StudentMate verification code is " + str(code))
+        return redirect("/code")
+    else:
+        return render_template("error.html", context={"error": "You have already requested a code. Please check your email's spam folder if you do not see the email."})
+
+@app.get("/code")
+def getcodepage():
+    return render_template("code.html")
+
+@app.post("/verifycode")
+def verifycode():
+    email = session["maybeEmail"]
+    code = request.form['code']
+    res = db.list_documents("users", "emailCodes", queries=[Query.equal("email", email), Query.equal("code", code)])
+    if res['total'] == 0:
+        return render_template("error.html", context={"error": "Invalid code."})
+    else:
+        res = db.delete_document("users", "emailCodes", res['documents'][0]['$id'])
+        results = db.list_documents("users", "users", queries=[Query.equal("email", email), Query.equal("method", "nolms")])
+        if results['total'] == 0:
+            results = db.create_document("users", "users", "unique()", {
+                "id": getId("users"),
+                "name": "<Signed Up Via Email>",
+                "email": email,
+                "method": "nolms"
+            })
+        else:
+            results = results['documents'][0]
+        session['user'] = results['id']
+        return redirect("/")
 
 @app.get("/class/<int:classId>/assignment/<assignmentId>/editNotifs/<notiftimes>")
 def editNotifs(classId:int, assignmentId, notiftimes):
@@ -355,7 +414,7 @@ def editAssignment(classId:int, assignmentId):
     
     assignment = assignment['documents'][0]
 
-    db.update_document("users", "assignments", assignment['$id'], {
+    toUpdate = {
         "id": assignmentId,
         "classId": userclass['id'],
         "name": request.form.get("name"),
@@ -363,7 +422,10 @@ def editAssignment(classId:int, assignmentId):
         "added": assignment['added'],
         "due": request.form.get("due"),
         "completed": assignment['completed']
-    })
+    }
+    if "fetchurl" in request.form:
+        toUpdate['courseId'] = request.form.get("fetchurl")
+    db.update_document("users", "assignments", assignment['$id'], toUpdate)
     return redirect("/class/" + str(classId))
 
 @app.post("/class/<int:classId>/assignment/<assignmentId>/delete")
@@ -464,6 +526,14 @@ def editClass(classId:int):
     })
     return redirect("/class/" + str(classId))
 
+@app.post("/class/<int:classId>/delete")
+def deleteClass(classId:int):
+    uclass = db.list_documents("users", "classes", queries=[Query.equal("id", classId), Query.equal("userId", int(session.get("user")))])
+    if uclass['total'] == 0:
+        return render_template("error.html", context={"error": "You are not enrolled in this class."})
+    db.delete_document("users", "classes", uclass['documents'][0]['$id'])
+    return redirect("/")
+
 @app.post("/class/<int:classId>/addAssignment")
 def addAssignment(classId:int):
     
@@ -525,7 +595,21 @@ def classpage(classId:int):
             "overdue": due < datetime.datetime.now().replace(tzinfo=due.tzinfo),
             "notifs": notifs
         }))
-    return render_template("class.html", userclass=userclass, assignments=assignList)
+    return render_template("class.html", userclass=userclass, assignments=assignList, notfromlms=userclass['notfromlms'])
+
+@app.post("/class/create")
+def createClass():
+    courseId = getId("classes")
+    db.create_document("users", "classes", "unique()", {
+        "id": courseId,
+        "className": request.form.get("name"),
+        "teacher": request.form.get("teacher"),
+        "userId": int(session.get("user")),
+        "courseId": request.form.get("fetchurl"),
+        "propagateAutomatically": request.form.get("propagateAutomatically") == "on",
+        "notfromlms": True
+    })
+    return redirect(f"/class/{courseId}") 
 
 scheduler = BackgroundScheduler()
 scheduler.add_job(func=remind, trigger="interval", seconds=60)

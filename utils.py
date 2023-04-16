@@ -212,10 +212,13 @@ def propagate():
 
     for userclass in documents:
         user = db.list_documents("users", "users", queries=[Query.equal("id", userclass['userId'])])
-        if userclass['propagateAutomatically'] and user['method'] == "bb-na":
+        if userclass['propagateAutomatically'] and user['method'] != "gclassroom":
             print(userclass['className'], userclass['userId'])
-            slidesLink = getBbClassPage(
-                userclass['userId'], userclass['courseId'])
+            if userclass['notfromlms']:
+                slidesLink = userclass['courseId']
+            else:
+                slidesLink = getBbClassPage(
+                    userclass['userId'], userclass['courseId'])
             if slidesLink:
                 assignments = gpt_ify_classes(slidesLink)
                 for name, due in assignments.items():
