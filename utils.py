@@ -1,4 +1,3 @@
-# https://docs.google.com/presentation/d/e/2PACX-1vQvLy60vlsp4jsGW69-lkppZeThqanHiqJcYt-4JyZffI4tZL-cwLmWZTgLWM1pc7BjzICJE9FBLnw7/embed?start=false&amp;loop=false&amp;delayms=3000
 from sentence_transformers import SentenceTransformer, util
 from lxml import etree
 import smtplib
@@ -211,7 +210,7 @@ def propagate():
                 break
 
     for userclass in documents:
-        user = db.list_documents("users", "users", queries=[Query.equal("id", userclass['userId'])])
+        user = db.list_documents("users", "users", queries=[Query.equal("id", userclass['userId'])])['documents'][0]
         if userclass['propagateAutomatically'] and user['method'] != "gclassroom":
             print(userclass['className'], userclass['userId'])
             if userclass['notfromlms']:
